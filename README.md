@@ -1,51 +1,34 @@
-# Solana Validator Distribution Analysis
+# alpenglow validator analysis
 
-## 🧠 Project Objective
+analysis of solana validator economics and distribution patterns.
 
-Analyze and visualize validator-related distributions within the Solana blockchain ecosystem using statistical and graphical methods. Build 4 key probability distributions and compute their Gini coefficients to understand wealth concentration and validator economics.
+## analysis
 
-## 📊 Distributions
+the main analysis is contained in `notebooks/profitability.ipynb`, which examines validator stake distributions, operational costs, and profitability under different scenarios.
 
-1. **Stake Distribution**: Histogram and PDF of validator stake sizes.
-2. **Validator Cost Distribution**: Histogram of operational costs (assume $/SOL ratio).
-3. **Validator Income Distribution**: Histogram of validator incomes (assume yield per SOL).
-4. **Validator Profitability Distribution**: Income minus cost per validator.
+## data structure
 
-## 📈 Gini Coefficient
+the dataset in `data/validator_profit.csv` is sourced from [Helius' analysis](https://www.helius.dev/blog/simd-228) contains validator profitability metrics with the following structure:
+- validator stake amounts
+- operational costs
+- revenue calculations
+- profit margins
 
-- Compute for each distribution.
-- Visualize with Lorenz Curves.
-
-## 🗂️ Dataset
-
-- `data/validator_stats.csv` (columns: Stake Range, Total Staked, Number of Validators, Median Stake)
-
-## 🛠️ Requirements
-
-- Python 3.10+
-- See `requirements.txt`
-
-## 📁 Structure
+## project structure
 
 ```
-solana-validator-analysis/
-│
+alpenglow_validator_analysis/
 ├── data/
-│   └── validator_stats.csv
-│
+│   └── validator_profit.csv
 ├── notebooks/
-│   └── 01_distributions.ipynb
-│   └── 02_gini_analysis.ipynb
-│
+│   └── profitability.ipynb
 ├── scripts/
-│   └── generate_distributions.py
-│   └── compute_gini.py
-│
-├── README.md
+│   ├── linebar.py
+│   └── utils.py
+├── charts/
 └── requirements.txt
 ```
 
-## 🚀 Usage
+## requirements
 
-- Run notebooks in `notebooks/` for interactive analysis.
-- Use scripts in `scripts/` for CLI-based analysis.
+python 3.10+ with dependencies listed in `requirements.txt`.
