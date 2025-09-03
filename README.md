@@ -1,20 +1,20 @@
-# alpenglow validator analysis
+# Alpenglow Validator Analysis
 
-analysis of solana validator economics and distribution patterns.
+Analysis of Solana's validator set economics and stake distribution patterns.
 
-## analysis
+## Analysis
 
-the main analysis is contained in `notebooks/profitability.ipynb`, which examines validator stake distributions, operational costs, and profitability under different scenarios.
+The main analysis is contained in `notebooks/profitability.ipynb`, which examines validator stake distributions, operational costs, and profitability under different scenarios.
 
-## data structure
+## Data Structure
 
-the dataset in `data/validator_profit.csv` is sourced from [Helius' analysis](https://www.helius.dev/blog/simd-228) contains validator profitability metrics with the following structure:
+The dataset in `data/validator_profit.csv` is sourced from [Helius' analysis](https://www.helius.dev/blog/simd-228) contains validator profitability metrics with the following structure:
 - validator stake amounts
 - operational costs
 - revenue calculations
 - profit margins
 
-## project structure
+## Project Structure
 
 ```
 alpenglow_validator_analysis/
