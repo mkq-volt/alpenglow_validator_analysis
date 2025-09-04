@@ -2,8 +2,10 @@ import pandas as pd
 import numpy as np
 import math
 import pygal
+from IPython.display import SVG, display
 
 from pygal.style import BlueStyle, Style
+from scripts.linebar import LineBar
 
 BASELINE_INFLATION_RATE = 0.0434
 TUNING_CONSTANT_C = math.pi
@@ -210,3 +212,287 @@ def recompute_profits(df: pd.DataFrame) -> pd.DataFrame:
         df['Voting Cost (SOL)']
     )
     return df
+
+def get_custom_chart_style(value_font=15):
+    """return standardized pygal style configuration"""
+    return Style(
+        background=BlueStyle.background,
+        plot_background=BlueStyle.plot_background,
+        foreground=BlueStyle.foreground,
+        foreground_strong=BlueStyle.foreground_strong,
+        foreground_subtle=BlueStyle.foreground_subtle,
+        opacity=BlueStyle.opacity,
+        opacity_hover=BlueStyle.opacity_hover,
+        transition=BlueStyle.transition,
+        colors=BlueStyle.colors,
+        value_font_size=value_font,
+        label_font_size=15,
+        major_label_font_size=15,
+        legend_font_size=15,
+        tooltip_font_size=15,
+    )
+
+def create_stake_bins():
+    """return standard stake bins and labels for distribution analysis"""
+    stake_bins = [0, 1_000, 10_000, 50_000, 100_000, 250_000, 500_000, 1_000_000, float('inf')]
+    bin_labels = ['<1k','1k-10k','10k-50k','50k-100k','100k-250k','250k-500k','500k-1m','>1m']
+    return stake_bins, bin_labels
+
+def get_percentile_buckets(df, num_buckets=5):
+    """assign stake buckets by percentile, with top 1% as a separate bucket"""
+    stake = df['Active Stake (SOL)'].astype(float)
+    percentile_bins = [0, 0.2, 0.4, 0.6, 0.8, 0.99, 1.0]
+    bucket_labels = [
+        '0-20 %ile',
+        '20-40 %ile', 
+        '40-60 %ile',
+        '60-80 %ile',
+        '80-99 %ile',
+        'top 1 %ile'
+    ]
+    stake_percentiles = stake.rank(method='min', pct=True)
+    df = df.copy()
+    df['stake_bucket'] = pd.cut(
+        stake_percentiles,
+        bins=percentile_bins,
+        labels=bucket_labels,
+        include_lowest=True,
+        right=True
+    )
+    return df, bucket_labels
+
+def bucket_profits_with_top1(df, num_buckets=5):
+    """create profit buckets with separate top 1% bucket"""
+    df = df[['Active Stake (SOL)', 'Profit(SOL)']].dropna().sort_values('Active Stake (SOL)').reset_index(drop=True)
+    n = len(df)
+    top1_cutoff = int(np.ceil(n * 0.99))
+    
+    bucket_labels = [f'{int(i*100/num_buckets)}-{int((i+1)*100/num_buckets)}%ile' for i in range(num_buckets - 1)]
+    bucket_labels.append('80-99%ile')
+    bucket_labels.append('top 1%')
+    
+    bucket_assignment = pd.Series([None] * n)
+    
+    if top1_cutoff > 0:
+        quantile_labels = [f'{int(i*100/num_buckets)}-{int((i+1)*100/num_buckets)}%ile' for i in range(num_buckets - 1)]
+        quantile_labels.append('80-99%ile')
+        bucket_assignment.iloc[:top1_cutoff] = pd.qcut(
+            np.arange(top1_cutoff), num_buckets, labels=quantile_labels
+        )
+    
+    bucket_assignment.iloc[top1_cutoff:] = 'top 1%'
+    df['bucket'] = bucket_assignment
+
+    grouped = df.groupby('bucket', observed=True)['Profit(SOL)']
+    avg_profits = grouped.mean().reindex(bucket_labels).tolist()
+    total_profits = grouped.sum().reindex(bucket_labels).tolist()
+    
+    return bucket_labels, avg_profits, total_profits
+
+def create_stake_distribution_chart(df, title="Validators by Stake Bucket"):
+    """create stake distribution chart showing validator counts and total stake"""
+    stake_bins, bin_labels = create_stake_bins()
+    
+    stake_binned = pd.cut(
+        df['Active Stake (SOL)'],
+        bins=stake_bins, labels=bin_labels, right=False, include_lowest=True
+    )
+
+    validator_counts = stake_binned.value_counts().reindex(bin_labels, fill_value=0)
+    stake_per_bucket = (
+        df.groupby(stake_binned, observed=False)['Active Stake (SOL)']
+        .sum()
+        .reindex(bin_labels, fill_value=0)
+    )
+
+    counts = [int(validator_counts.get(lb, 0)) for lb in bin_labels]
+    stake_sol = [float(stake_per_bucket.get(lb, 0.0)) for lb in bin_labels]
+
+    config = pygal.Config()
+    config.human_readable = True
+    config.legend_at_bottom = True
+    config.legend_at_bottom_columns = 2
+    config.x_label_rotation = 30
+    config.print_values = False
+    config.interpolate = False
+    config.value_formatter = lambda x: str(int(x))
+    
+    def fmt_sol(value):
+        if value >= 1_000_000:
+            return f"{value/1_000_000:.1f}M"
+        elif value >= 1_000:
+            return f"{value/1_000:.1f}k"
+        return str(int(value))
+    config.secondary_value_formatter = fmt_sol
+
+    primary_range = (0, int(max(5, (max(counts) if counts else 0) * 1.1)))
+    secondary_range = (0, max(1.0, (max(stake_sol) if stake_sol else 0.0) * 1.1))
+
+    chart = LineBar(
+        config,
+        width=900,
+        height=420,
+        title=title,
+        x_title="Active Stake Range (SOL)",
+        y_title="Number of Validators",
+        y_title_secondary="Total Stake (SOL)",
+        legend_box_size=10,
+        range=primary_range,
+        secondary_range=secondary_range,
+        style=pygal.style.DefaultStyle(value_font_size=10),
+        human_readable=True,
+        format_secondary_value=fmt_sol,
+    )
+
+    chart.x_labels = bin_labels + [""]  # prevent last bar overlap
+    chart.add("number of validators", counts, plotas='bar')
+    chart.add("total stake (SOL)", stake_sol, plotas='line', secondary=True)
+
+    return chart
+
+def create_revenue_breakdown_chart(df, top_n=100, title_prefix="Top", chart_title=None):
+    """create stacked bar chart showing revenue breakdown by source"""
+    if chart_title is None:
+        chart_title = f'{title_prefix} {top_n} Validator Revenue Breakdown'
+    
+    if title_prefix.lower() == "top":
+        df_sorted = df.sort_values('Total Revenue (SOL)', ascending=False).head(top_n)
+    else:  # bottom
+        df_bottom = df.sort_values('Total Revenue (SOL)', ascending=True).head(top_n)
+        df_sorted = df_bottom.sort_values('Total Revenue (SOL)', ascending=False)
+
+    block_rewards = df_sorted['Total Revenue (SOL)'] * df_sorted['Block Rewards Revenue as % of Total Revenue (%)']
+    mev_revenue = df_sorted['Jito MEV Revenue (SOL)'].astype(float)
+    issuance = df_sorted['Issuance Revenue (SOL)'].astype(float)
+
+    chart = pygal.StackedBar(
+        title=chart_title,
+        x_title='Validator',
+        y_title='Revenue (SOL)',
+        style=get_custom_chart_style(),
+        width=1200,
+        height=700,
+        x_label_rotation=30,
+        show_legend=True,
+        human_readable=True,
+        legend_at_bottom=True,
+        print_values=False,
+    )
+
+    chart.add('fees', [round(v, 2) for v in block_rewards])
+    chart.add('mev revenue', [round(v, 2) for v in mev_revenue])
+    if issuance.sum() > 0:
+        chart.add('issuance', [round(v, 2) for v in issuance])
+
+    return chart
+
+def create_gini_inflation_chart(df, title='Gini Coefficient vs Inflation Rate'):
+    """create line chart showing gini coefficient vs inflation rate"""
+    gini_improvements = calculate_gini_inflation_ratio(df)
+    
+    chart = pygal.Line(
+        title=title,
+        x_title='Inflation Rate (%)',
+        y_title='Gini Coefficient',
+        style=get_custom_chart_style(),
+        width=1200,
+        height=700,
+        show_legend=False,
+        x_label_rotation=30,
+        human_readable=True,
+        interpolate='cubic'
+    )
+
+    inflation_rates = [float(imp['inflation_rate']) for imp in gini_improvements]
+    gini_coefficients = [float(imp['gini_coefficient']) for imp in gini_improvements]
+
+    chart.x_labels = [f"{rate:.2f}" for rate in inflation_rates]
+    chart.add('gini coefficient', gini_coefficients)
+
+    return chart
+
+def create_profit_comparison_chart(scenarios, scenario_labels, title='Average Validator Profit by Stake Size'):
+    """create multi-bar chart comparing profit scenarios by stake percentiles"""
+    def get_bucket_means(df):
+        stake = df['Active Stake (SOL)'].astype(float)
+        percentile_bins = [0, 0.2, 0.4, 0.6, 0.8, 0.99, 1.0]
+        bucket_labels = ['0-20 %ile', '20-40 %ile', '40-60 %ile', '60-80 %ile', '80-99 %ile', 'top 1 %ile']
+        
+        stake_percentiles = stake.rank(method='min', pct=True)
+        df = df.copy()
+        df['stake_bucket'] = pd.cut(
+            stake_percentiles,
+            bins=percentile_bins,
+            labels=bucket_labels,
+            include_lowest=True,
+            right=True
+        )
+        means = (
+            df.groupby('stake_bucket', observed=True)['Profit(SOL)']
+            .mean()
+            .reindex(bucket_labels)
+            .fillna(0)
+        )
+        return means, bucket_labels
+
+    scenario_means = []
+    bucket_labels = None
+    for df in scenarios:
+        means, bucket_labels = get_bucket_means(df)
+        scenario_means.append(means)
+
+    chart = pygal.Bar(
+        title=title,
+        x_title='Stake Size Percentile Bucket',
+        y_title='Average Profit (SOL)',
+        style=get_custom_chart_style(10),
+        width=1200,
+        height=700,
+        show_legend=True,
+        x_label_rotation=15,
+        legend_at_bottom=True,
+        print_values=True,
+        print_values_position='top',
+        value_formatter=lambda x: f'{x:,.0f}',
+        human_readable=True,
+    )
+
+    chart.x_labels = bucket_labels
+    for i, (means, label) in enumerate(zip(scenario_means, scenario_labels)):
+        chart.add(label, [round(v, 2) for v in means.values])
+
+    return chart
+
+def create_simd228_chart(scenarios, scenario_labels, title='SIMD228 Analysis: Average Validator Profit by Stake Size'):
+    """create chart for SIMD228 scenario analysis with total profit labels"""
+    scenario_data = []
+    for df in scenarios:
+        labels, avg_profits, total_profits = bucket_profits_with_top1(df, num_buckets=5)
+        scenario_data.append((labels, avg_profits, total_profits))
+
+    chart = pygal.Bar(
+        title=title,
+        x_title='Stake Size Percentile Bucket',
+        y_title='Average Profit (SOL)',
+        width=1200,
+        height=700,
+        show_legend=True,
+        legend_at_bottom=True,
+        style=get_custom_chart_style(),
+        human_readable=True,
+        value_formatter=lambda x: f'{x:.0f}',
+        show_y_guides=True,
+        print_values=True,
+        print_values_position='top',
+        x_label_rotation=30,
+    )
+
+    chart.x_labels = scenario_data[0][0]  # use labels from first scenario
+    
+    for i, ((labels, avg_profits, total_profits), scenario_label) in enumerate(zip(scenario_data, scenario_labels)):
+        chart.add(scenario_label, [
+            {'value': avg if not pd.isna(avg) else 0, 'label': f'{int(tot):,}' if not pd.isna(tot) else '0'} 
+            for avg, tot in zip(avg_profits, total_profits)
+        ])
+
+    return chart
