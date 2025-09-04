@@ -3,6 +3,8 @@ import numpy as np
 import math
 import pygal
 
+from pygal.style import BlueStyle, Style
+
 BASELINE_INFLATION_RATE = 0.0434
 TUNING_CONSTANT_C = math.pi
 TOTAL_CIRCULATING_SOL = 602_997_606
@@ -154,23 +156,41 @@ def profit_distribution_chart(df: pd.DataFrame, title: str) -> pygal.Bar:
         .fillna(0)
     )
 
+    custom_style = Style(
+        background=BlueStyle.background,
+        plot_background=BlueStyle.plot_background,
+        foreground=BlueStyle.foreground,
+        foreground_strong=BlueStyle.foreground_strong,
+        foreground_subtle=BlueStyle.foreground_subtle,
+        opacity=BlueStyle.opacity,
+        opacity_hover=BlueStyle.opacity_hover,
+        transition=BlueStyle.transition,
+        colors=BlueStyle.colors,
+        value_font_size=15,      # small value labels
+        label_font_size=15,     # small axis labels
+        major_label_font_size=15,
+        legend_font_size=15,    # small legend
+        tooltip_font_size=15,
+    )
+
 
     chart = pygal.Bar(
         title=title,
         x_title='Stake Size Percentile Bucket',
         y_title='Average Profit (SOL)',
-        style=pygal.style.BlueStyle,
-        width=700,
-        height=400,
-        show_legend=False,
+        style=custom_style,
+        width=1200,   # much wider
+        height=700,   # much taller
+        show_legend=True,
         x_label_rotation=15,
+        legend_at_bottom=True,
         print_values=True,
         print_values_position='top',
         value_formatter=lambda x: f'{x:,.0f}',
         human_readable=True,
     )
 
-    chart.add('average profit', [round(v, 2) for v in avg_profit_by_bucket.values])
+    chart.add('status quo (gini coefficient: 0.9314)', [round(v, 2) for v in avg_profit_by_bucket.values])
     chart.x_labels = bucket_labels
 
     return chart
